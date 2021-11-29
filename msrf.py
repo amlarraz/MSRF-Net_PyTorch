@@ -224,9 +224,9 @@ class MSRF(nn.Module):
         super().__init__()
 
         # ENCODER ----------------------------
-        self.n11 = nn.Sequential(nn.Conv2d(in_ch, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+        self.n11 = nn.Sequential(nn.Conv2d(in_ch, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
-                                 nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat),
                                  SE_block(init_feat)
@@ -234,27 +234,27 @@ class MSRF(nn.Module):
 
         self.n21 = nn.Sequential(nn.MaxPool2d(kernel_size=(2, 2)),
                                  nn.Dropout(0.2),
-                                 nn.Conv2d(init_feat, init_feat*2, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat, init_feat*2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
-                                 nn.Conv2d(init_feat*2, init_feat*2, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat*2, init_feat*2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat*2),
                                  SE_block(init_feat*2))
 
         self.n31 = nn.Sequential(nn.MaxPool2d(kernel_size=(2, 2)),
                                  nn.Dropout(0.2),
-                                 nn.Conv2d(init_feat*2, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat*2, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
-                                 nn.Conv2d(init_feat*4, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat*4, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat*4),
                                  SE_block(init_feat*4))
 
         self.n41 = nn.Sequential(nn.MaxPool2d(kernel_size=(2, 2)),
                                  nn.Dropout(0.2),
-                                 nn.Conv2d(init_feat*4, init_feat*8, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat*4, init_feat*8, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
-                                 nn.Conv2d(init_feat*8, init_feat*8, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+                                 nn.Conv2d(init_feat*8, init_feat*8, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat*8))
         # MSRF-subnetwork ----------------------------
@@ -274,8 +274,10 @@ class MSRF(nn.Module):
                                  nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
                                  RES_block(init_feat),
                                  nn.Conv2d(init_feat, init_feat//2, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
-        self.nc3 = nn.Sequential(nn.Conv2d(init_feat*4, 1, kernel_size=(1, 1), stride=(1, 1), padding=(1, 1)),
+
+        self.nc3 = nn.Sequential(nn.Conv2d(init_feat*4, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
                                  nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True))
+
         self.gsc_1 = GSC_block(init_feat//2, 1)
 
         self.nss_2 = nn.Sequential(RES_block(1),
@@ -298,10 +300,10 @@ class MSRF(nn.Module):
         # DECODER
         # Stage 1:
         self.att_1 = ATTENTION_block(init_feat*4, init_feat*8, init_feat*8)
-        self.up_1 = UP_block(init_feat*4, init_feat)
+        self.up_1 = UP_block(init_feat*4, init_feat*8)
         self.dualatt_1 = DUALATT_block(init_feat*4, init_feat*8, init_feat*4)
-        self.dec_block_1 = nn.Sequential(nn.Conv2d(init_feat*4+init_feat*4, init_feat*4, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                         nn.BatchNorm2d(init_feat*4),
+        self.n34_t = nn.Conv2d(init_feat * 4 + init_feat * 8, init_feat * 4, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
+        self.dec_block_1 = nn.Sequential(nn.BatchNorm2d(init_feat*4),
                                          nn.ReLU(),
                                          nn.Conv2d(init_feat*4, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                          nn.BatchNorm2d(init_feat*4),
@@ -315,8 +317,8 @@ class MSRF(nn.Module):
         self.att_2 = ATTENTION_block(init_feat * 2, init_feat * 4, init_feat * 2)
         self.up_2 = UP_block(init_feat * 2, init_feat * 4)
         self.dualatt_2 = DUALATT_block(init_feat * 2, init_feat * 4, init_feat * 2)
-        self.dec_block_2 = nn.Sequential(nn.Conv2d(init_feat * 2 + init_feat * 2, init_feat * 2, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                         nn.BatchNorm2d(init_feat * 2),
+        self.n24_t = nn.Conv2d(init_feat * 2 + init_feat * 4, init_feat * 2, kernel_size=(1, 1), stride=(1, 1), padding=(0,0))
+        self.dec_block_2 = nn.Sequential(nn.BatchNorm2d(init_feat * 2),
                                          nn.ReLU(),
                                          nn.Conv2d(init_feat * 2, init_feat * 2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                          nn.BatchNorm2d(init_feat * 2),
@@ -328,11 +330,12 @@ class MSRF(nn.Module):
 
         # Stage 3:
         self.up_3 = nn.ConvTranspose2d(init_feat * 2, init_feat, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
-        self.dec_block_3 = nn.Sequential(nn.Conv2d(init_feat+init_feat, init_feat, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                         nn.ReLU(),
-                                         nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
+        self.n14_input = nn.Sequential(nn.Conv2d(init_feat + init_feat, init_feat, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+                                       nn.ReLU())
+        self.dec_block_3 = nn.Sequential(nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                          nn.ReLU(),
                                          nn.BatchNorm2d(init_feat))
+
         self.head_dec_3 = nn.Sequential(nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                         nn.ReLU(),
                                         nn.Conv2d(init_feat, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
@@ -378,9 +381,11 @@ class MSRF(nn.Module):
         # DECODER
         # Stage 1:
         x34_preinput = self.att_1(x33, x43)
+
         x34 = self.up_1(x34_preinput, x43)
         x34_t = self.dualatt_1(x33, x43)
         x34_t = torch.cat([x34, x34_t], dim=1)
+        x34_t = self.n34_t(x34_t)
         x34 = self.dec_block_1(x34_t) + x34_t
 
         pred_1 = self.head_dec_1(x34)
@@ -388,17 +393,27 @@ class MSRF(nn.Module):
         # Stage 2:
         x24_preinput = self.att_2(x23, x34)
         x24 = self.up_2(x24_preinput, x34)
-        x24_t = self.dualatt_1(x23, x34)
+        x24_t = self.dualatt_2(x23, x34)
         x24_t = torch.cat([x24, x24_t], dim=1)
+        x24_t = self.n24_t(x24_t)
         x24 = self.dec_block_2(x24_t) + x24_t
 
         pred_2 = self.head_dec_2(x24)
 
         # Stage 3:
-        x14_preinput = self.up3(x24)
+        x14_preinput = self.up_3(x24)
         x14_input = torch.cat([x14_preinput, x13], dim=1)
+        x14_input = self.n14_input(x14_input)
         x14 = self.dec_block_3(x14_input)
         x14 = x14 + x14_input
-        pred_3 = self.head_dec_1(x14)
+        pred_3 = self.head_dec_3(x14)
 
         return pred_3, pred_canny, pred_1, pred_2
+
+
+model = MSRF(1, init_feat=32)
+x = torch.randn((2, 1, 128, 128))
+canny = torch.randn((2, 1, 128, 128))
+out = model(x, canny)
+for o in out:
+    print(o.shape)
