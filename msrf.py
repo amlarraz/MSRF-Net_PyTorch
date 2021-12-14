@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
+from torchvision.models.resnet import BasicBlock
 
 
 # BLOCKS to construct the model
@@ -218,10 +220,63 @@ class GSC_block(nn.Module):
 
         return inpt
 
+## SHAPE-STREAM
+# https://github.com/leftthomas/GatedSCNN/blob/master/model.py
+
+class GatedConv(nn.Conv2d):
+    def __init__(self, in_channels, out_channels):
+        super().__init__(in_channels, out_channels, 1, bias=False)
+        self.attention = nn.Sequential(
+            nn.BatchNorm2d(in_channels + 1),
+            nn.Conv2d(in_channels + 1, in_channels + 1, 1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels + 1, 1, 1),
+            nn.BatchNorm2d(1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, feat, gate):
+        attention = self.attention(torch.cat((feat, gate), dim=1))
+        out = F.conv2d(feat * (attention + 1), self.weight)
+        return out
+
+class ShapeStream(nn.Module):
+    def __init__(self, init_feat):
+        super().__init__()
+        self.res2_conv = nn.Conv2d(init_feat * 2, 1, 1)
+        self.res3_conv = nn.Conv2d(init_feat * 4, 1, 1)
+        self.res4_conv = nn.Conv2d(init_feat * 8, 1, 1)
+        self.res1 = BasicBlock(init_feat, init_feat, 1)
+        self.res2 = BasicBlock(32, 32, 1)
+        self.res3 = BasicBlock(16, 16, 1)
+        self.res1_pre = nn.Conv2d(init_feat, 32, 1)
+        self.res2_pre = nn.Conv2d(32, 16, 1)
+        self.res3_pre = nn.Conv2d(16, 8, 1)
+        self.gate1 = GatedConv(32, 32)
+        self.gate2 = GatedConv(16, 16)
+        self.gate3 = GatedConv(8, 8)
+        self.gate = nn.Conv2d(8, 1, 1, bias=False)
+        self.fuse = nn.Conv2d(2, 1, 1, bias=False)
+
+    def forward(self, x, res2, res3, res4, grad):  #def forward(self, x, res2, res3, res4, grad):
+        size = grad.size()[-2:]
+        x = F.interpolate(x, size, mode='bilinear', align_corners=True)
+        res2 = F.interpolate(self.res2_conv(res2), size, mode='bilinear', align_corners=True)
+        res3 = F.interpolate(self.res3_conv(res3), size, mode='bilinear', align_corners=True)
+        res4 = F.interpolate(self.res4_conv(res4), size, mode='bilinear', align_corners=True)
+        gate1 = self.gate1(self.res1_pre(self.res1(x)), res2)
+        gate2 = self.gate2(self.res2_pre(self.res2(gate1)), res3)
+        gate3 = self.gate3(self.res3_pre(self.res3(gate2)), res4)
+        gate = torch.sigmoid(self.gate(gate3))
+        #gate = torch.sigmoid(self.gate(gate2))
+        feat = torch.sigmoid(self.fuse(torch.cat((gate, grad), dim=1)))
+        return gate, feat
+
+
 
 # MODEL  (NOT CHECKED)
 class MSRF(nn.Module):
-    def __init__(self, in_ch, init_feat=32):
+    def __init__(self, in_ch, n_classes, init_feat=32):
         super().__init__()
 
         # ENCODER ----------------------------
@@ -270,11 +325,13 @@ class MSRF(nn.Module):
         self.dsfs_9  = DSDF_block(init_feat, init_feat*2, nf1=init_feat, nf2=init_feat*2, gc=init_feat//2)
         self.dsfs_10 = DSDF_block(init_feat*4, init_feat*8, nf1=init_feat*4, nf2=init_feat*8, gc=init_feat*4//2)
 
-        # CANNY - block:
+        # SHAPE STREAM ------------IN PROGRESS-------------------
+        self.shape_stream = ShapeStream(init_feat)
+        """
         self.nss_1 = nn.Sequential(nn.Conv2d(init_feat*2, init_feat, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                 nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                                 RES_block(init_feat),
-                                 nn.Conv2d(init_feat, init_feat//2, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
+                                   nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                                   RES_block(init_feat),
+                                   nn.Conv2d(init_feat, init_feat//2, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
 
         self.nc3 = nn.Sequential(nn.Conv2d(init_feat*4, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
                                  nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True))
@@ -297,7 +354,7 @@ class MSRF(nn.Module):
                                         nn.Conv2d(1, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
                                         nn.BatchNorm2d(1),
                                         nn.ReLU())
-
+        """
         # DECODER
         # Stage 1:
         self.att_1 = ATTENTION_block(init_feat*4, init_feat*8, init_feat*8)
@@ -311,7 +368,7 @@ class MSRF(nn.Module):
                                          nn.ReLU(),
                                          nn.Conv2d(init_feat*4, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
                                          )
-        self.head_dec_1 = nn.Sequential(nn.Conv2d(init_feat*4, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+        self.head_dec_1 = nn.Sequential(nn.Conv2d(init_feat*4, n_classes, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
                                         nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True))
 
         # Stage 2:
@@ -326,12 +383,12 @@ class MSRF(nn.Module):
                                          nn.ReLU(),
                                          nn.Conv2d(init_feat*2, init_feat * 2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
                                          )
-        self.head_dec_2 = nn.Sequential(nn.Conv2d(init_feat * 2, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+        self.head_dec_2 = nn.Sequential(nn.Conv2d(init_feat * 2, n_classes, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
                                         nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True))
 
         # Stage 3:
         self.up_3 = nn.ConvTranspose2d(init_feat * 2, init_feat, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
-        self.n14_input = nn.Sequential(nn.Conv2d(init_feat + init_feat, init_feat, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
+        self.n14_input = nn.Sequential(nn.Conv2d(init_feat + init_feat + 1, init_feat, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
                                        nn.ReLU())
         self.dec_block_3 = nn.Sequential(nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                          nn.ReLU(),
@@ -339,8 +396,8 @@ class MSRF(nn.Module):
 
         self.head_dec_3 = nn.Sequential(nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                         nn.ReLU(),
-                                        nn.Conv2d(init_feat, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                        nn.Sigmoid())
+                                        nn.Conv2d(init_feat, n_classes, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
+                                        #nn.Sigmoid())
 
     def forward(self, x, canny):
         # ENCODER:
@@ -366,10 +423,13 @@ class MSRF(nn.Module):
         x33 = (x33*0.4) + x31
         x43 = (x43*0.4) + x41
 
-        # CANNY - block  REVISAR BIEN
+        # SHAPE STREAM  -----------------------REVISAR BIEN------------------------------
+        # https://github.com/leftthomas/GatedSCNN (https://arxiv.org/pdf/1907.05740.pdf)
+        canny_gate, canny_feat = self.shape_stream(x13, x23, x33, x43, canny)
+        """
         ss = self.nss_1(x23)
         c3 = self.nc3(x33)
-        ss = self.gsc_1(ss, c3) #devuelve 1 canal
+        ss = self.gsc_1(ss, c3)  # devuelve 1 canal
 
         ss = self.nss_2(ss)
         c4 = self.nc4(x43)
@@ -378,7 +438,7 @@ class MSRF(nn.Module):
 
         canny = torch.cat([edge_out, canny], dim=1)
         pred_canny = self.head_canny(canny)
-
+        """
         # DECODER
         # Stage 1:
         x34_preinput = self.att_1(x33, x43)
@@ -403,18 +463,18 @@ class MSRF(nn.Module):
 
         # Stage 3:
         x14_preinput = self.up_3(x24)
-        x14_input = torch.cat([x14_preinput, x13], dim=1)
+        x14_input = torch.cat([x14_preinput, x13, canny_feat], dim=1)
         x14_input = self.n14_input(x14_input)
         x14 = self.dec_block_3(x14_input)
         x14 = x14 + x14_input
         pred_3 = self.head_dec_3(x14)
 
-        return pred_3, pred_canny, pred_1, pred_2
+        return pred_3, canny_gate, pred_1, pred_2
 
-
-model = MSRF(1, init_feat=32)
-x = torch.randn((2, 1, 128, 128))
-canny = torch.randn((2, 1, 128, 128))
-out = model(x, canny)
-for o in out:
-    print(o.shape)
+if __name__=="__main__":
+    model = MSRF(1, 3, init_feat=32)
+    x = torch.randn((2, 1, 128, 128))
+    canny = torch.randn((2, 1, 128, 128))
+    out = model(x, canny)
+    for o in out:
+        print(o.shape)

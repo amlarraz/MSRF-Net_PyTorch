@@ -3,18 +3,20 @@ import cv2
 import random
 import numpy as np
 import albumentations as albu
+from collections import defaultdict
 import torch
 from torch.utils.data import Dataset
 
 random.seed(42)
 
 class DataSet(Dataset):
-    def __init__(self, data_dir, mode='train', augmentation=True):
+    def __init__(self, data_dir, n_classes, mode='train', augmentation=True):
         """ Data_dir must be organized in:
-            - images: Folder that contains all the images (.png) in the dataset.
-            - masks: Folder that contains all the masks (.png) in the dataset
+            - Images: Folder that contains all the images (.png) in the dataset.
+            - Masks: Folder that contains all the masks (.png) in the dataset
         """
         self.data_dir = data_dir
+        self.n_classes = n_classes
         self.mode = mode
         self.augmentation = augmentation
         percents = {'train': 0.75, 'val': 0.15, 'test': 0.1}
@@ -53,10 +55,23 @@ class DataSet(Dataset):
 
         return img
 
+    def class_weights(self):
+        counts = defaultdict(lambda : 0)
+        for img_name in self.img_names:
+            msk = cv2.imread(os.path.join(self.data_dir, 'Masks', img_name), -1)
+            for i, c in enumerate(range(self.n_classes)):
+                count = np.sum(msk == c)
+                counts[c] += count
+
+        weights = np.array([(float(np.median(list(counts.values()))) / (float(c))) for c in counts.values()])
+        return torch.FloatTensor(weights)
+
     def __getitem__(self, idx):
         img = cv2.imread(os.path.join(self.data_dir, 'Images', self.img_names[idx]), 0)
         msk = cv2.imread(os.path.join(self.data_dir, 'Masks', self.img_names[idx]), 0)
-
+        canny = cv2.Canny(img, 10, 100)
+        canny = np.asarray(canny, np.float32)
+        canny /= 255.0
         if self.augmentation:
             augmented = self.augs(image=img, mask=msk)
             img = augmented['image']
@@ -64,9 +79,12 @@ class DataSet(Dataset):
 
         img = self.normalize(img)
 
-        return torch.FloatTensor(img).unsqueeze(0), torch.LongTensor(msk).unsqueeze(0)
+        return torch.FloatTensor(img).unsqueeze(0), torch.FloatTensor(canny).unsqueeze(0), torch.LongTensor(msk), torch.FloatTensor(canny)
 
-dataset = DataSet('/media/poto/Gordo1/SegThor', 'train', True)
-img, msk = dataset[0]
-print(img.shape, img.min(), img.max())
-print(msk.shape)
+
+if __name__== "__main__":
+    dataset = DataSet('/media/poto/Gordo1/SegThor', 2, 'train', True)
+    img, canny, msk, canny_label = dataset[0]
+    print(img.shape, img.min(), img.max())
+    print(canny.shape, canny.min(), canny.max())
+    print(msk.shape)
