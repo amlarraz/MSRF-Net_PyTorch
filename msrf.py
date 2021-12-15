@@ -285,7 +285,7 @@ class MSRF(nn.Module):
                                  nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat),
-                                 SE_block(init_feat)
+                                 SE_block(init_feat, ratio=init_feat//2)
                                  )
 
         self.n21 = nn.Sequential(nn.MaxPool2d(kernel_size=(2, 2)),
@@ -295,7 +295,7 @@ class MSRF(nn.Module):
                                  nn.Conv2d(init_feat*2, init_feat*2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat*2),
-                                 SE_block(init_feat*2))
+                                 SE_block(init_feat*2, ratio=init_feat//2))
 
         self.n31 = nn.Sequential(nn.MaxPool2d(kernel_size=(2, 2)),
                                  nn.Dropout(0.2),
@@ -304,7 +304,7 @@ class MSRF(nn.Module):
                                  nn.Conv2d(init_feat*4, init_feat*4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                  nn.ReLU(),
                                  nn.BatchNorm2d(init_feat*4),
-                                 SE_block(init_feat*4))
+                                 SE_block(init_feat*4, ratio=init_feat//2))
 
         self.n41 = nn.Sequential(nn.MaxPool2d(kernel_size=(2, 2)),
                                  nn.Dropout(0.2),
@@ -397,7 +397,6 @@ class MSRF(nn.Module):
         self.head_dec_3 = nn.Sequential(nn.Conv2d(init_feat, init_feat, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
                                         nn.ReLU(),
                                         nn.Conv2d(init_feat, n_classes, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
-                                        #nn.Sigmoid())
 
     def forward(self, x, canny):
         # ENCODER:
