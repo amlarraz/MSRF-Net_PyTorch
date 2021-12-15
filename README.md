@@ -10,4 +10,4 @@ Unofficial code of MSRF-Net developed in PyTorch
 
 ## Model architecture draw
 
-![MSRF-NET diagram](./images/MSRF-NET.png)
+![MSRF-NET diagram](./images/MSRF-NET.jpg)
