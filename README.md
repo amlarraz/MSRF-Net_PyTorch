@@ -12,7 +12,7 @@ Unofficial code of [MSRF-Net](https://arxiv.org/pdf/2105.07451.pdf) developed in
 ## Implementation details
 
 - PyTorch 1.8.1 was used with cuda 11.2.
-- The hyperparameter init_feat was added. It controls the number of initial channels for the UNet. In the original code It was 32. I recommend to use a power of two.
+- The hyperparameter init_feat was added. It controls the number of initial channels for the UNet. In the original code It was 32. I recommend to use a power of two  because the reduction ratio in [Squeeze and Excitation blocks](https://arxiv.org/abs/1709.01507).
 - The Shape Stream isn't copy exactly from official code, It was copied from the [original Shape Stream repo](https://github.com/leftthomas/GatedSCNN)
 
 ## Model architecture draw
