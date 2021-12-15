@@ -20,6 +20,8 @@ lr = 1e-4
 weight_decay = 0.01
 device = torch.device('cuda:0')
 
+init_feat = 8    # In the original code it was 32
+
 # DATASET
 dataset_train    = DataSet(data_dir, n_classes, mode='train', augmentation=True)
 dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=4,
@@ -30,7 +32,7 @@ dataloader_val   = DataLoader(dataset_val, batch_size=batch_size, shuffle=False,
                               pin_memory=torch.cuda.is_available())
 
 # MODEL, OPTIM, LR_SCHED, LOSS, LOG
-model         = MSRF(in_ch=1, n_classes=n_classes, init_feat=8)
+model         = MSRF(in_ch=1, n_classes=n_classes, init_feat=init_feat)
 optimizer     = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8)
 class_weights = dataset_train.class_weights().cuda()#to(device)  #REVISAR
 criterion     = CombinedLoss(class_weights)

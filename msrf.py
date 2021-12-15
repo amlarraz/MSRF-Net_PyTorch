@@ -327,34 +327,7 @@ class MSRF(nn.Module):
 
         # SHAPE STREAM ------------IN PROGRESS-------------------
         self.shape_stream = ShapeStream(init_feat)
-        """
-        self.nss_1 = nn.Sequential(nn.Conv2d(init_feat*2, init_feat, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                   nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                                   RES_block(init_feat),
-                                   nn.Conv2d(init_feat, init_feat//2, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
 
-        self.nc3 = nn.Sequential(nn.Conv2d(init_feat*4, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                 nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True))
-
-        self.gsc_1 = GSC_block(init_feat//2, 1)
-
-        self.nss_2 = nn.Sequential(RES_block(1),
-                                   nn.Conv2d(1, 8, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)))
-        self.nc4 = nn.Sequential(nn.Conv2d(init_feat*8, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                 nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True))
-
-        self.gsc_2 = GSC_block(8, 1)
-        self.nss_3 = nn.Sequential(RES_block(1),
-                                   nn.Conv2d(1, 4, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                   nn.Conv2d(4, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),  #stride=(1,1)
-                                   nn.Sigmoid())
-
-        self.head_canny = nn.Sequential(nn.Conv2d(1+1, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),  # 1+1 -> n_labels, n_labels?
-                                        nn.Sigmoid(),      # Sigmoid -> Softmax?
-                                        nn.Conv2d(1, 1, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-                                        nn.BatchNorm2d(1),
-                                        nn.ReLU())
-        """
         # DECODER
         # Stage 1:
         self.att_1 = ATTENTION_block(init_feat*4, init_feat*8, init_feat*8)
@@ -422,22 +395,10 @@ class MSRF(nn.Module):
         x33 = (x33*0.4) + x31
         x43 = (x43*0.4) + x41
 
-        # SHAPE STREAM  -----------------------REVISAR BIEN------------------------------
+        # SHAPE STREAM
         # https://github.com/leftthomas/GatedSCNN (https://arxiv.org/pdf/1907.05740.pdf)
         canny_gate, canny_feat = self.shape_stream(x13, x23, x33, x43, canny)
-        """
-        ss = self.nss_1(x23)
-        c3 = self.nc3(x33)
-        ss = self.gsc_1(ss, c3)  # devuelve 1 canal
 
-        ss = self.nss_2(ss)
-        c4 = self.nc4(x43)
-        ss = self.gsc_2(ss, c4)
-        edge_out = self.nss_3(ss)
-
-        canny = torch.cat([edge_out, canny], dim=1)
-        pred_canny = self.head_canny(canny)
-        """
         # DECODER
         # Stage 1:
         x34_preinput = self.att_1(x33, x43)
