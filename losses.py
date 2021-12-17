@@ -114,11 +114,11 @@ class DiceLoss(nn.Module):
                 "input and target must be in the same device. Got: {}" .format(
                     input.device, target.device))
         # compute softmax over the classes axis
-        input_soft = F.softmax(input, dim=1)
+        input_soft = F.softmax(input, dim=1)[:, 1:]
 
         # create the labels one hot tensor
         target_one_hot = one_hot(target, num_classes=input.shape[1],
-                                 device=input.device, dtype=input.dtype)
+                                 device=input.device, dtype=input.dtype)[:, 1:]
 
         # compute the actual dice score
         dims = (1, 2, 3)

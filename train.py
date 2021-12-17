@@ -1,18 +1,18 @@
-import os
 import numpy as np
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from dataset import DataSet
 
 from msrf import MSRF
-from utils import prepare_writer
+from utils import prepare_writer, save_checkpoint, imgs2tb
 from losses import CombinedLoss
 
 # TRAIN PARAMS
 dataset_name = 'SegThor'
 data_dir = '/media/poto/Gordo1/SegThor'
 n_classes = 5
+n_img_to_tb = 5
 
 n_epochs = 100
 batch_size = 3
@@ -40,12 +40,13 @@ lr_scheduler  = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min'
                                                             patience=10, verbose=False)
 writer, logdir = prepare_writer(dataset_name)
 
+print('Logdir: {}'.format(logdir))
 # TRAIN LOOP
 model.to(device)
 for epoch in range(1, n_epochs+1):
     model.train()
     metrics = {'train_loss': [], 'train_dice': [], 'val_loss': [], 'val_dice': []}
-    tq = tqdm(total=len(dataloader_train)*batch_size)
+    tq = tqdm(total=len(dataloader_train)*batch_size, position=0, leave=True)
     tq.set_description('Train epoch: {}'.format(epoch))
 
     for i, (img, canny, msk, canny_label) in enumerate(dataloader_train):
@@ -65,8 +66,9 @@ for epoch in range(1, n_epochs+1):
     writer.add_scalar('train dice', np.mean(metrics['train_dice']), epoch)
 
     model.eval()
-    tq = tqdm(total=len(dataloader_val) * batch_size)
+    tq = tqdm(total=len(dataloader_val) * batch_size, position=0, leave=True)
     tq.set_description('Val epoch: {}'.format(epoch))
+    k = 0
     for i, (img, canny, msk, canny_label) in enumerate(dataloader_val):
         img, canny, msk, canny_label = img.to(device), canny.to(device), msk.to(device), canny_label.to(device)
         with torch.no_grad():
@@ -76,6 +78,13 @@ for epoch in range(1, n_epochs+1):
             metrics['val_loss'].append(loss.item())
             metrics['val_dice'].append(1-dice.item())
             tq.update(batch_size)
+
+            if k < n_img_to_tb:
+                imgs2tb(img, msk, pred_3, writer, k, epoch+1)
+                k += 1
+
     print('Epoch {}: val loss: {}, val dice: {}'.format(epoch, np.mean(metrics['val_loss']), np.mean(metrics['val_dice'])))
     writer.add_scalar('val loss', np.mean(metrics['val_loss']), epoch)
     writer.add_scalar('val dice', np.mean(metrics['val_dice']), epoch)
+
+    save_checkpoint(model, optimizer, logdir, epoch, {'val_loss': np.mean(metrics['val_loss']), 'val_dice': np.mean(metrics['val_dice'])})
