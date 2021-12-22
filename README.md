@@ -9,6 +9,7 @@ Unofficial code of [MSRF-Net](https://arxiv.org/pdf/2105.07451.pdf) developed in
 - [x] Improve the training/evaluation code adding some stuff to tensorboard.
 - [x] Write the test code.
 - [x] Write the inferencing (demo) code.
+- [ ] Train and test.
 
 ## Implementation details
 
