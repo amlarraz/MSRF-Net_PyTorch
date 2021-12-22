@@ -92,9 +92,10 @@ class DiceLoss(nn.Module):
         >>> output.backward()
     """
 
-    def __init__(self) -> None:
+    def __init__(self, weights) -> None:
         super(DiceLoss, self).__init__()
         self.eps: float = 1e-6
+        self.weights = weights
 
     def forward(
             self,
@@ -114,11 +115,11 @@ class DiceLoss(nn.Module):
                 "input and target must be in the same device. Got: {}" .format(
                     input.device, target.device))
         # compute softmax over the classes axis
-        input_soft = F.softmax(input, dim=1)[:, 1:]
+        input_soft = F.softmax(input, dim=1)*self.weights.unsqueeze(0).unsqueeze(-1).unsqueeze(-1) #[:,1:]
 
         # create the labels one hot tensor
         target_one_hot = one_hot(target, num_classes=input.shape[1],
-                                 device=input.device, dtype=input.dtype)[:, 1:]
+                                 device=input.device, dtype=input.dtype)#[:, 1:]
 
         # compute the actual dice score
         dims = (1, 2, 3)
@@ -132,16 +133,15 @@ class CombinedLoss(nn.Module):
     def __init__(self, class_weights):
         super().__init__()
         self.ce_loss   = nn.CrossEntropyLoss(class_weights)
-        self.dice_loss = DiceLoss()
+        self.dice_loss = DiceLoss(class_weights)
         self.bce_loss = nn.BCEWithLogitsLoss()
 
     def forward(self, pred_3, pred_canny, pred_1, pred_2, msk, canny_label):
-        dice_loss_3 = self.dice_loss(pred_3, msk)
-        loss_pred_3 = self.ce_loss(pred_3, msk) + dice_loss_3
+        loss_pred_3 = self.ce_loss(pred_3, msk) + self.dice_loss(pred_3, msk)
         loss_pred_1 = self.ce_loss(pred_1, msk) + self.dice_loss(pred_1, msk)
         loss_pred_2 = self.ce_loss(pred_2, msk) + self.dice_loss(pred_2, msk)
         loss_canny = self.bce_loss(pred_canny, canny_label.unsqueeze(1))
         loss = loss_pred_3 + loss_pred_1 + loss_pred_2 + loss_canny
 
-        return loss, dice_loss_3
+        return loss
 

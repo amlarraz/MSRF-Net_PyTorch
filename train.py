@@ -7,34 +7,36 @@ from dataset import DataSet
 from msrf import MSRF
 from utils import prepare_writer, save_checkpoint, imgs2tb
 from losses import CombinedLoss
+from metrics import calculate_dice
 
 # TRAIN PARAMS
 dataset_name = 'SegThor'
 data_dir = '/media/poto/Gordo1/SegThor'
 n_classes = 5
 n_img_to_tb = 5
+resize = (256, 256)  # None or 2-tuple
 
 n_epochs = 100
 batch_size = 3
-lr = 1e-4
+lr = 2e-4
 weight_decay = 0.01
 device = torch.device('cuda:0')
 
-init_feat = 8    # In the original code it was 32
+init_feat = 32   # In the original code it was 32
 
 # DATASET
-dataset_train    = DataSet(data_dir, n_classes, mode='train', augmentation=True)
+dataset_train    = DataSet(data_dir, n_classes, mode='train', augmentation=True, resize=resize)
 dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=4,
                               pin_memory=torch.cuda.is_available())
 
-dataset_val      = DataSet(data_dir, n_classes, mode='val', augmentation=False)
+dataset_val      = DataSet(data_dir, n_classes, mode='val', augmentation=False, resize=resize)
 dataloader_val   = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=4,
                               pin_memory=torch.cuda.is_available())
 
 # MODEL, OPTIM, LR_SCHED, LOSS, LOG
 model         = MSRF(in_ch=1, n_classes=n_classes, init_feat=init_feat)
 optimizer     = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8)
-class_weights = dataset_train.class_weights().cuda()#to(device)  #REVISAR
+class_weights = dataset_train.class_weights().to(device)
 criterion     = CombinedLoss(class_weights)
 lr_scheduler  = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5,
                                                             patience=10, verbose=False)
@@ -54,11 +56,12 @@ for epoch in range(1, n_epochs+1):
         optimizer.zero_grad()
         pred_3, pred_canny, pred_1, pred_2 = model(img, canny)
         # Forward + Backward + Optimize
-        loss, dice = criterion(pred_3, pred_canny, pred_1, pred_2, msk, canny_label)
+        loss = criterion(pred_3, pred_canny, pred_1, pred_2, msk, canny_label)
         loss.backward()
         optimizer.step()
         metrics['train_loss'].append(loss.item())
-        metrics['train_dice'].append(1-dice.item())
+        dice = calculate_dice(pred_3, msk)
+        metrics['train_dice'].append(dice.item())
         tq.update(batch_size)
 
     print('Epoch {}: train loss: {}, train dice: {}'.format(epoch, np.mean(metrics['train_loss']), np.mean(metrics['train_dice'])))
@@ -74,9 +77,10 @@ for epoch in range(1, n_epochs+1):
         with torch.no_grad():
             pred_3, pred_canny, pred_1, pred_2 = model(img, canny)
             # Forward + Backward + Optimize
-            loss, dice = criterion(pred_3, pred_canny, pred_1, pred_2, msk, canny_label)
+            loss = criterion(pred_3, pred_canny, pred_1, pred_2, msk, canny_label)
             metrics['val_loss'].append(loss.item())
-            metrics['val_dice'].append(1-dice.item())
+            dice = calculate_dice(pred_3, msk)
+            metrics['val_dice'].append(dice.item())
             tq.update(batch_size)
 
             if k < n_img_to_tb:

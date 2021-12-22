@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 random.seed(42)
 
 class DataSet(Dataset):
-    def __init__(self, data_dir, n_classes, mode='train', augmentation=True):
+    def __init__(self, data_dir, n_classes, mode='train', augmentation=True, resize=None):
         """ Data_dir must be organized in:
             - Images: Folder that contains all the images (.png) in the dataset.
             - Masks: Folder that contains all the masks (.png) in the dataset
@@ -19,6 +19,7 @@ class DataSet(Dataset):
         self.n_classes = n_classes
         self.mode = mode
         self.augmentation = augmentation
+        self.resize = resize
         percents = {'train': 0.75, 'val': 0.15, 'test': 0.1}
         assert mode in percents.keys(), 'Mode is {} and it must be one of: train, val, test'.format(self.mode)
         total_imgs = os.listdir(os.path.join(data_dir, 'Images'))
@@ -60,15 +61,19 @@ class DataSet(Dataset):
         for img_name in self.img_names:
             msk = cv2.imread(os.path.join(self.data_dir, 'Masks', img_name), -1)
             for i, c in enumerate(range(self.n_classes)):
-                count = np.sum(msk == c)
-                counts[c] += count
+                counts[c] += np.sum(msk == c)
+        counts = dict(sorted(counts.items()))
+        weights = [1 - (x/sum(list(counts.values()))) for x in counts.values()]
 
-        weights = np.array([(float(np.median(list(counts.values()))) / (float(c))) for c in counts.values()])
         return torch.FloatTensor(weights)
 
     def __getitem__(self, idx):
         img = cv2.imread(os.path.join(self.data_dir, 'Images', self.img_names[idx]), 0)
         msk = cv2.imread(os.path.join(self.data_dir, 'Masks', self.img_names[idx]), 0)
+        if self.resize is not None:
+            img = cv2.resize(img, self.resize, interpolation=cv2.INTER_CUBIC)
+            msk = cv2.resize(msk, self.resize, interpolation=cv2.INTER_NEAREST)
+
         canny = cv2.Canny(img, 10, 100)
         canny = np.asarray(canny, np.float32)
         canny /= 255.0
