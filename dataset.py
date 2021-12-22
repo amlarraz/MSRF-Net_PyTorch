@@ -9,6 +9,25 @@ from torch.utils.data import Dataset
 
 random.seed(42)
 
+
+def normalize(img):
+    if img.dtype == np.uint8:
+        mean = 0.175  # Mean / max_pixel_value
+        std = 0.151  # Std / max_pixel_value
+        max_pixel_value = 255.0
+
+    elif img.dtype == np.uint16:
+        mean = 0.0575716
+        std = 0.12446098
+        max_pixel_value = 65535.0
+
+    img = img.astype(np.float32) / max_pixel_value
+    img -= np.ones(img.shape) * mean
+    img /= np.ones(img.shape) * std
+
+    return img
+
+
 class DataSet(Dataset):
     def __init__(self, data_dir, n_classes, mode='train', augmentation=True, resize=None):
         """ Data_dir must be organized in:
@@ -38,23 +57,7 @@ class DataSet(Dataset):
     def __len__(self):
         return len(self.img_names)
 
-    def normalize(self, img):
 
-        if img.dtype == np.uint8:
-            mean = 0.175  # Mean / max_pixel_value
-            std = 0.151  # Std / max_pixel_value
-            max_pixel_value = 255.0
-
-        elif img.dtype == np.uint16:
-            mean = 0.0575716
-            std = 0.12446098
-            max_pixel_value = 65535.0
-
-        img = img.astype(np.float32) / max_pixel_value
-        img -= np.ones(img.shape) * mean
-        img /= np.ones(img.shape) * std
-
-        return img
 
     def class_weights(self):
         counts = defaultdict(lambda : 0)
@@ -82,7 +85,7 @@ class DataSet(Dataset):
             img = augmented['image']
             msk = augmented['mask']
 
-        img = self.normalize(img)
+        img = normalize(img)
 
         return torch.FloatTensor(img).unsqueeze(0), torch.FloatTensor(canny).unsqueeze(0), torch.LongTensor(msk), torch.FloatTensor(canny)
 
