@@ -7,7 +7,8 @@ Unofficial code of [MSRF-Net](https://arxiv.org/pdf/2105.07451.pdf) developed in
 - [x] Write the model code based on [official TF code](https://github.com/NoviceMAn-prog/MSRF-Net).
 - [x] Write the training/evaluation code.
 - [x] Improve the training/evaluation code adding some stuff to tensorboard.
-- [ ] Write the test/inferencing code.
+- [x] Write the test code.
+- [ ] Write the inferencing (demo) code.
 
 ## Implementation details
 
