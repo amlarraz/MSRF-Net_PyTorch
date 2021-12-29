@@ -43,7 +43,6 @@ for img_name in image_list:
     with torch.no_grad():
         pred_3, pred_canny, pred_1, pred_2 = model(img, canny)
         pred_3 = F.softmax(pred_3, dim=1)[0]
-        print(pred_3.max())
         if threshold is not None:
             final_pred = torch.zeros_like(pred_3[0])
             for n_class in range(1, pred_3.shape[0]):

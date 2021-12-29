@@ -53,7 +53,7 @@ class DataSet(Dataset):
             self.augs = albu.OneOf([albu.ElasticTransform(p=0.5, alpha=120, sigma=280 * 0.05, alpha_affine=120 * 0.03),
                                     albu.GridDistortion(p=0.5, border_mode=cv2.BORDER_CONSTANT, distort_limit=0.2),
                                     albu.Rotate(p=0.5, limit=(-5, 5), interpolation=1, border_mode=cv2.BORDER_CONSTANT),
-                                    ])
+                                    ],)
     def __len__(self):
         return len(self.img_names)
 
@@ -77,13 +77,14 @@ class DataSet(Dataset):
             img = cv2.resize(img, self.resize, interpolation=cv2.INTER_CUBIC)
             msk = cv2.resize(msk, self.resize, interpolation=cv2.INTER_NEAREST)
 
-        canny = cv2.Canny(img, 10, 100)
-        canny = np.asarray(canny, np.float32)
-        canny /= 255.0
         if self.augmentation:
             augmented = self.augs(image=img, mask=msk)
             img = augmented['image']
             msk = augmented['mask']
+
+        canny = cv2.Canny(img, 10, 100)
+        canny = np.asarray(canny, np.float32)
+        canny /= 255.0
 
         img = normalize(img)
 

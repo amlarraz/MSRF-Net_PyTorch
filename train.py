@@ -18,7 +18,8 @@ resize = (256, 256)  # None or 2-tuple
 
 n_epochs = 100
 batch_size = 3
-lr = 2e-4
+lr = 1e-4
+accumulation_steps = 6
 weight_decay = 0.01
 device = torch.device('cuda:0')
 
@@ -53,12 +54,17 @@ for epoch in range(1, n_epochs+1):
 
     for i, (img, canny, msk, canny_label) in enumerate(dataloader_train):
         img, canny, msk, canny_label = img.to(device), canny.to(device), msk.to(device), canny_label.to(device)
-        optimizer.zero_grad()
+
         pred_3, pred_canny, pred_1, pred_2 = model(img, canny)
         # Forward + Backward + Optimize
         loss = criterion(pred_3, pred_canny, pred_1, pred_2, msk, canny_label)
+        loss = loss/accumulation_steps
         loss.backward()
-        optimizer.step()
+        # accumulative gradient
+        if (i + 1) % accumulation_steps == 0:  # Wait for several backward steps
+            optimizer.step()  # Now we can do an optimizer step
+            model.zero_grad()  # Reset gradients tensors
+
         metrics['train_loss'].append(loss.item())
         dice = calculate_dice(pred_3, msk)
         metrics['train_dice'].append(dice.item())
@@ -84,7 +90,7 @@ for epoch in range(1, n_epochs+1):
             tq.update(batch_size)
 
             if k < n_img_to_tb:
-                imgs2tb(img, msk, pred_3, writer, k, epoch+1)
+                imgs2tb(img, msk, pred_3, canny, pred_canny, writer, k, epoch+1)
                 k += 1
 
     print('Epoch {}: val loss: {}, val dice: {}'.format(epoch, np.mean(metrics['val_loss']), np.mean(metrics['val_dice'])))

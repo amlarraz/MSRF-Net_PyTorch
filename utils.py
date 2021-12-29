@@ -23,7 +23,7 @@ def prepare_writer(dataset_name):
     return writer, os.path.join('./logs', log_name)
 
 
-def imgs2tb(img, msk, pred, writer, n_img, epoch):
+def imgs2tb(img, msk, pred, canny, pred_canny, writer, n_img, epoch):
     n_classes = pred.shape[1]
     # It shows only the 1st img in the batch
     # Prepare data
@@ -33,7 +33,10 @@ def imgs2tb(img, msk, pred, writer, n_img, epoch):
     msk = msk[0].detach().cpu().numpy()*(255//n_classes)          # to show in bright colors
     pred = torch.argmax(F.softmax(pred[0], dim=0), dim=0).detach().cpu().numpy()*(255//n_classes)  # No threshold->argmax
 
-    final_img = np.concatenate([img, msk, pred], axis=1)
+    canny = canny[0, 0].detach().cpu().numpy()*50
+    pred_canny = pred_canny[0, 0].detach().cpu().numpy()*50
+
+    final_img = np.concatenate([img, msk, pred, canny, pred_canny], axis=1)
     writer.add_image('Image {}'.format(n_img), final_img, epoch, dataformats='HW')
 
     return None
